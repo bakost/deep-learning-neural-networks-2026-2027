@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jacobi-eigen"
+version = "1.0.0"
+description = "Метод Якоби (вращений) для вычисления собственных чисел и векторов вещественной симметричной матрицы"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "bakost" }]
+keywords = ["jacobi", "eigenvalues", "eigenvectors", "linear algebra", "numerical methods"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Intended Audience :: Education",
+]
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+docs = ["sphinx>=6.0", "sphinx-rtd-theme", "myst-parser"]
+dev = ["pytest>=7.0", "mypy>=1.0", "ruff>=0.1"]
+
+[project.scripts]
+jacobi-eigen = "jacobi_eigen.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+jacobi_eigen = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = ["slow: медленные тесты (большие матрицы)"]
+doctest_optionflags = ["ELLIPSIS", "IGNORE_EXCEPTION_DETAIL", "NORMALIZE_WHITESPACE"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
