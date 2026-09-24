@@ -1,5 +1,5 @@
 # Намеренно НЕсимметричная матрица — демонстрация диагностики ошибок:
-#   python -m jacobi_eigen --input examples/matrix_bad.txt
+#   python3 -m jacobi_eigen --input examples/matrix_bad.txt
 # Ожидаемый результат: сообщение NotSymmetricError и код возврата 2.
 1 2 3
 9 5 6

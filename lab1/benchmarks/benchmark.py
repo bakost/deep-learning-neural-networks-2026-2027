@@ -9,9 +9,9 @@
 
 Запуск::
 
-    python benchmarks/benchmark.py                    # быстрый прогон
-    python benchmarks/benchmark.py --sizes 10 20 40 80 --repeats 5
-    python benchmarks/benchmark.py --markdown results.md
+    python3 benchmarks/benchmark.py                    # быстрый прогон
+    python3 benchmarks/benchmark.py --sizes 10 20 40 80 --repeats 5
+    python3 benchmarks/benchmark.py --markdown results.md
 """
 
 from __future__ import annotations

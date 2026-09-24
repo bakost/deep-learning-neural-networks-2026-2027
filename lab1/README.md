@@ -37,21 +37,24 @@ print(result.residual_norm(A))   # 1.8e-15 — невязка ||A V - V L||
 Нужен Python ≥ 3.9 и NumPy.
 
 ```bash
-pip install -e .
+python3 -m pip install -e .
 ```
+
+Во всех командах ниже используется `python3`: на macOS команда `python` часто
+указывает на системный Python 2.7, в котором нет ни NumPy, ни pytest.
 
 Для запуска тестов и сборки документации:
 
 ```bash
-pip install -e ".[test]"     # pytest
-pip install -e ".[docs]"     # sphinx
+python3 -m pip install -e ".[test]"     # pytest
+python3 -m pip install -e ".[docs]"     # sphinx
 ```
 
 Пакет можно использовать и без установки — достаточно добавить `src` в
 `PYTHONPATH`:
 
 ```bash
-PYTHONPATH=src python -m jacobi_eigen --demo
+PYTHONPATH=src python3 -m jacobi_eigen --demo
 ```
 
 ## Возможности
@@ -71,7 +74,7 @@ PYTHONPATH=src python -m jacobi_eigen --demo
 - **Контракты** (предусловия, постусловия, инварианты) — своя реализация
   Design by Contract, отключаемая одним флагом.
 - **Гарантия завершения**: зацикливание невозможно, лимит итераций жёсткий.
-- **CLI** `python -m jacobi_eigen` с режимами сверки и сравнения скорости.
+- **CLI** `python3 -m jacobi_eigen` с режимами сверки и сравнения скорости.
 
 ## Использование
 
@@ -132,11 +135,11 @@ result.to_dict()                # представление для JSON
 ## Командная строка
 
 ```bash
-python -m jacobi_eigen --demo                      # пример 5x5 из методички
-python -m jacobi_eigen --input matrix.txt --check  # из файла + сверка с numpy
-python -m jacobi_eigen --random 50 --seed 1        # случайная матрица
-python -m jacobi_eigen --random 100 --compare      # сравнение всех ядер
-python -m jacobi_eigen --random 4 --json           # машиночитаемый вывод
+python3 -m jacobi_eigen --demo                      # пример 5x5 из методички
+python3 -m jacobi_eigen --input matrix.txt --check  # из файла + сверка с numpy
+python3 -m jacobi_eigen --random 50 --seed 1        # случайная матрица
+python3 -m jacobi_eigen --random 100 --compare      # сравнение всех ядер
+python3 -m jacobi_eigen --random 4 --json           # машиночитаемый вывод
 ```
 
 Формат файла — числа через пробел или запятую, по строке на строку матрицы;
@@ -196,8 +199,8 @@ $\cos^2\varphi + \sin^2\varphi = 1$), валидация входа и сост�
 Проверки отключаются тремя способами:
 
 ```bash
-python -O program.py                    # стандартный флаг оптимизации
-JACOBI_CONTRACTS=0 python program.py    # переменная окружения
+python3 -O program.py                    # стандартный флаг оптимизации
+JACOBI_CONTRACTS=0 python3 program.py    # переменная окружения
 ```
 ```python
 from jacobi_eigen import contracts_disabled
@@ -243,14 +246,14 @@ with contracts_disabled():
 Запуск замеров:
 
 ```bash
-python benchmarks/benchmark.py --sizes 10 20 40 80 --repeats 3
+python3 benchmarks/benchmark.py --sizes 10 20 40 80 --repeats 3
 ```
 
 ## Тесты
 
 ```bash
-PYTHONPATH=src python -m pytest tests/ -v                          # 250 тестов
-PYTHONPATH=src python -m pytest --doctest-modules src/jacobi_eigen # 13 примеров из докстрингов
+PYTHONPATH=src python3 -m pytest tests/ -v                          # 250 тестов
+PYTHONPATH=src python3 -m pytest --doctest-modules src/jacobi_eigen # 13 примеров из докстрингов
 ```
 
 **263 теста**, все проходят:
@@ -277,12 +280,12 @@ PYTHONPATH=src python -m pytest --doctest-modules src/jacobi_eigen # 13 прим
 - [docs/API.md](docs/API.md) — справочник API, **генерируется автоматически**
   из докстрингов:
   ```bash
-  python tools/gen_api_docs.py
+  python3 tools/gen_api_docs.py
   ```
 - [docs/benchmarks.md](docs/benchmarks.md) — результаты замеров;
 - HTML-документация через Sphinx (`autodoc` + `napoleon`):
   ```bash
-  pip install -e ".[docs]"
+  python3 -m pip install -e ".[docs]"
   sphinx-build -b html docs docs/_build/html
   ```
 

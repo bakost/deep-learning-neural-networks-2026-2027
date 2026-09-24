@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "level-spacing"
+version = "1.0.0"
+description = "Распределение расстояний между соседними собственными числами случайных матриц: GOE, матрицы из ±1, догадка Вигнера"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "bakost" }]
+keywords = ["random matrices", "GOE", "level spacing", "Wigner surmise", "level repulsion"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Intended Audience :: Education",
+]
+dependencies = ["numpy>=1.22", "scipy>=1.9", "matplotlib>=3.6"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+jacobi = ["jacobi-eigen"]   # бэкенд "jacobi": pip install -e ../lab1
+dev = ["pytest>=7.0", "ruff>=0.1"]
+
+[project.scripts]
+level-spacing = "level_spacing.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+doctest_optionflags = ["ELLIPSIS", "NORMALIZE_WHITESPACE"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "RUF"]
+# Аннотации в стиле Optional/Dict — как в ЛР1 (совместимость с Python 3.9);
+# RUF001–003 срабатывают на кириллицу и знаки «×», «−» в документации.
+ignore = ["UP006", "UP007", "UP035", "UP037", "UP045", "RUF001", "RUF002", "RUF003", "RUF022"]

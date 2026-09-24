@@ -3,7 +3,7 @@
 
 Запуск::
 
-    python examples/quickstart.py
+    python3 examples/quickstart.py
 """
 
 from __future__ import annotations

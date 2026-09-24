@@ -1,21 +1,21 @@
-"""Интерфейс командной строки: ``python -m jacobi_eigen``.
+"""Интерфейс командной строки: ``python3 -m jacobi_eigen``.
 
 Примеры использования::
 
     # матрица из текстового файла (строки — строки матрицы)
-    python -m jacobi_eigen --input matrix.txt
+    python3 -m jacobi_eigen --input matrix.txt
 
     # случайная симметричная матрица 6x6 с фиксированным зерном
-    python -m jacobi_eigen --random 6 --seed 42 --check
+    python3 -m jacobi_eigen --random 6 --seed 42 --check
 
     # разбор примера из методички, шаг за шагом
-    python -m jacobi_eigen --demo
+    python3 -m jacobi_eigen --demo
 
     # сравнение трёх ядер и numpy на матрице 100x100
-    python -m jacobi_eigen --random 100 --compare
+    python3 -m jacobi_eigen --random 100 --compare
 
     # машиночитаемый вывод
-    python -m jacobi_eigen --random 4 --json
+    python3 -m jacobi_eigen --random 4 --json
 
 Любая предусмотренная ошибка печатается одной понятной строкой, а программа
 завершается с кодом 2 — трассировка стека наружу не выводится.

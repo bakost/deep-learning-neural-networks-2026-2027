@@ -6,8 +6,8 @@
 сигнатурами. В отличие от Sphinx, он не требует установки дополнительных
 пакетов, поэтому документацию можно пересобрать в любой момент::
 
-    python tools/gen_api_docs.py              # записать docs/API.md
-    python tools/gen_api_docs.py --stdout     # вывести в консоль
+    python3 tools/gen_api_docs.py              # записать docs/API.md
+    python3 tools/gen_api_docs.py --stdout     # вывести в консоль
 
 Sphinx-конфигурация в ``docs/conf.py`` тоже поддерживается — она даёт более
 богатый HTML; этот скрипт нужен для быстрой пересборки и для того, чтобы

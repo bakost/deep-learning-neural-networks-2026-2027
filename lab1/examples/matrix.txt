@@ -1,5 +1,5 @@
 # Пример входного файла для CLI:
-#   python -m jacobi_eigen --input examples/matrix.txt --check
+#   python3 -m jacobi_eigen --input examples/matrix.txt --check
 # Числа разделяются пробелами или запятыми, строка файла = строка матрицы.
 # Матрица обязана быть квадратной, вещественной и симметричной.
  4  1  0  0

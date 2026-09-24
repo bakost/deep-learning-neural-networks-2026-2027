@@ -2,11 +2,11 @@
 
 Собрать документацию::
 
-    pip install -e ".[docs]"
+    python3 -m pip install -e ".[docs]"
     sphinx-build -b html docs docs/_build/html
 
 Если Sphinx ставить не хочется, Markdown-справочник по тем же докстрингам
-создаётся скриптом ``python tools/gen_api_docs.py`` без каких-либо
+создаётся скриптом ``python3 tools/gen_api_docs.py`` без каких-либо
 зависимостей.
 """
 
