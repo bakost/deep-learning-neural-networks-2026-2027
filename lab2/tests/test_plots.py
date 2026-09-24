@@ -69,3 +69,14 @@ def test_pair_choice(tmp_path):
 def test_normal_mirror(goe, tmp_path):
     studies = [run_study("normal-mirror", n, 3000, seed=4) for n in (2, 16)]
     _check(plot_normal_mirror(studies, goe[2]), tmp_path, "mirror")
+
+
+def test_orthogonal_invariance(tmp_path):
+    from level_spacing.experiments import orthogonal_invariance, variance_vs_angle
+    from level_spacing.plots import plot_orthogonal_invariance
+
+    names = ("goe", "pm1-sum")
+    angles = np.radians([0.0, 45.0, 90.0])
+    angle_data = {name: variance_vs_angle(name, angles, 2000, seed=1) for name in names}
+    checks = {name: orthogonal_invariance(name, 4, 2000, seed=1) for name in names}
+    _check(plot_orthogonal_invariance(angle_data, checks, size=2000), tmp_path, "orthogonal")

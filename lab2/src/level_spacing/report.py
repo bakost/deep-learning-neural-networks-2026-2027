@@ -36,10 +36,12 @@ from .experiments import (
     DEFAULT_SEED,
     ks_by_ensemble_size,
     ks_noise_constant,
+    orthogonal_invariance,
     pair_scan,
     pooled_spacings,
     run_study,
     study_rng,
+    variance_vs_angle,
 )
 from .plots import (
     plot_2x2_geometry,
@@ -47,6 +49,7 @@ from .plots import (
     plot_histogram_grid,
     plot_ks_vs_size,
     plot_normal_mirror,
+    plot_orthogonal_invariance,
     plot_pair_choice,
     plot_residuals,
     plot_small_s,
@@ -158,10 +161,32 @@ def generate_report(
     def step(message: str) -> None:
         log(f"[{time.perf_counter() - started:6.1f} с] {message}")
 
+    # --- Ортогональность ансамбля ------------------------------------------------
+    step("ортогональность ансамбля: Q^T H Q против H")
+    invariance_names = ("goe", "pm1-sum", "normal-mirror", "pm1")
+    angles = np.radians(np.arange(0.0, 90.1, 7.5))
+    angle_data = {name: variance_vs_angle(name, angles, config.size, seed) for name in invariance_names}
+    checks = {n: {name: orthogonal_invariance(name, n, config.size, seed=seed) for name in invariance_names}
+              for n in (4, 16)}
+    results["orthogonality"] = {str(n): value for n, value in checks.items()}
+    results["figures"].append(_save(plot_orthogonal_invariance(angle_data, checks[16]),
+                                    figures / "orthogonal_invariance.png"))
+    lines = ["| n | ансамбль | Var диагонали до → после | Var вне диагонали до → после "
+             "| KS H11 до/после | KS H12 до/после | ‖QᵀQ − I‖ | расхождение спектров |",
+             "|---|---|---|---|---|---|---|---|"]
+    for n, by_name in checks.items():
+        for name, c in by_name.items():
+            lines.append(
+                f"| {n} | {name} | {c['diag_var_before']:.3f} → {c['diag_var_after']:.3f} "
+                f"| {c['off_var_before']:.3f} → {c['off_var_after']:.3f} "
+                f"| {_fmt_p(c['ks_diag_p'])} | {_fmt_p(c['ks_off_p'])} "
+                f"| {c['orthogonality_error']:.1e} | {c['spectrum_error']:.1e} |")
+    tables.append("## Ортогональность ансамблей\n\n" + "\n".join(lines) + "\n")
+
     # --- 2×2: геометрия и формулы (13)–(14) ----------------------------------
     step("GOE 2×2: проверка формул (13)–(14)")
     goe2_matrices = get_ensemble("goe").sample(2, config.size, study_rng(seed, "goe", 2))
-    results["figures"].append(_save(plot_2x2_geometry(goe2_matrices), figures / "fig1_2x2_geometry.png"))
+    results["figures"].append(_save(plot_2x2_geometry(goe2_matrices), figures / "geometry_2x2.png"))
     raw2 = pair_spacings(eigenvalues(goe2_matrices))
     b = goe2_matrices[:, 0, 1]
     d = 0.5 * (goe2_matrices[:, 1, 1] - goe2_matrices[:, 0, 0])
@@ -185,9 +210,9 @@ def generate_report(
         plot_histogram_grid([[minimal[n] for n in SIZES], [main[n] for n in SIZES]],
                             widths=(0.2, 0.05),
                             title="Гауссов ортогональный ансамбль: гистограммы и догадка Вигнера"),
-        figures / "fig2_goe_histograms.png"))
+        figures / "goe_histograms.png"))
     results["figures"].append(_save(plot_small_s([main[n] for n in SIZES]),
-                                    figures / "fig3_small_s.png"))
+                                    figures / "small_s.png"))
     tables.append("## GOE, основной ансамбль\n\n" + _study_table(results["goe_main"]) + "\n")
     tables.append("## GOE, минимальный ансамбль\n\n" + _study_table(results["goe_minimal"]) + "\n")
 
@@ -196,7 +221,7 @@ def generate_report(
     results["goe_big"] = [big[n].summary() for n in SIZES]
     tables.append("## GOE, большой ансамбль\n\n" + _study_table(results["goe_big"]) + "\n")
     results["figures"].append(_save(plot_residuals([big[n] for n in SIZES]),
-                                    figures / "fig4_residuals.png"))
+                                    figures / "residuals.png"))
     grid, _, cdf_limit = goe_limit_table()
     plateau = float(np.max(np.abs(cdf_limit - wigner_cdf(grid))))
     noise = ks_noise_constant()
@@ -210,13 +235,13 @@ def generate_report(
     }
     results["wigner_vs_goe_limit_sup"] = plateau
     results["figures"].append(_save(plot_ks_vs_size(ks_data, plateau, noise),
-                                    figures / "fig5_ks_vs_size.png"))
+                                    figures / "ks_vs_size.png"))
 
     # --- Выбор пары k -----------------------------------------------------------
     step("GOE 16×16: все пары k")
     ev16 = simulate_eigenvalues("goe", 16, config.size, study_rng(seed + 3, "goe", 16))
     radius = 2.0 * np.sqrt(2.0 * 16)
-    results["figures"].append(_save(plot_pair_choice(ev16, radius), figures / "fig8_pair_choice.png"))
+    results["figures"].append(_save(plot_pair_choice(ev16, radius), figures / "pair_choice.png"))
     scan = pair_scan(ev16)
     results["pair_scan"] = {key: value.tolist() for key, value in scan.items()}
     results["pooled"] = {
@@ -232,8 +257,8 @@ def generate_report(
 
     # --- Пункт 9: матрицы из ±1 --------------------------------------------------
     exact_laws: Dict[str, Dict[int, object]] = {}
-    for name, construction, figure_name in (("pm1", "mirror", "fig6_pm1.png"),
-                                             ("pm1-sum", "sum", "fig7_pm1_sum.png")):
+    for name, construction, figure_name in (("pm1", "mirror", "pm1.png"),
+                                             ("pm1-sum", "sum", "pm1_sum.png")):
         step(f"±1 ({name}): ансамбли и полный перебор")
         studies = {n: run_study(name, n, config.size, seed) for n in SIZES}
         results[f"{name}_main"] = [studies[n].summary() for n in SIZES]
@@ -284,7 +309,7 @@ def generate_report(
     results["normal_mirror"] = [mirror[n].summary() for n in (2, 16)]
     results["normal_mirror_theory"] = {"raw_mean": NORMAL_MIRROR_2X2_RAW_MEAN}
     results["figures"].append(_save(plot_normal_mirror([mirror[2], mirror[16]], main[2]),
-                                    figures / "fig9_normal_mirror.png"))
+                                    figures / "normal_mirror.png"))
     tables.append("## normal-mirror\n\n" + _study_table(results["normal_mirror"]) + "\n")
 
     # --- Проверка методом Якоби из ЛР1 --------------------------------------------

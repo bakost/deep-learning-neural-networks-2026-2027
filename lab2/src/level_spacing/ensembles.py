@@ -28,19 +28,33 @@ r"""Ансамбли случайных вещественных симметр�
 ``normal-mirror``  N(0, 1)         mirror       сравнение: почему именно A + Aᵀ
 =================  ==============  ===========  ==================================
 
-Почему ``sum`` для нормальных элементов даёт именно GOE: у :math:`A + A^T`
-дисперсия диагонали равна 4, а вне диагонали — 2. Плотность такой матрицы
-:math:`\propto \exp(-\operatorname{tr} H^2 / 8)` зависит только от спектра и
-потому инвариантна относительно ортогональных преобразований — это и есть
-определение GOE. У ``normal-mirror`` все дисперсии равны 1, инвариантности
-нет, и для :math:`2 \times 2` догадка Вигнера перестаёт быть точной
-(см. :func:`level_spacing.distributions.normal_mirror_2x2_pdf`).
+Ортогональность ансамбля
+------------------------
+Гауссов *ортогональный* ансамбль называется так потому, что его
+распределение не меняется при любом ортогональном преобразовании
+:math:`H \to Q^T H Q`, :math:`Q^T Q = I`. У :math:`A + A^T` дисперсия
+диагонали равна 4, а вне диагонали — 2, и плотность
+
+.. math::
+    P(H) \propto \exp\Bigl(-\sum_i \frac{H_{ii}^2}{8} - \sum_{i<j} \frac{H_{ij}^2}{4}\Bigr)
+         = \exp\Bigl(-\frac{\operatorname{tr} H^2}{8}\Bigr)
+
+зависит только от :math:`\operatorname{tr} H^2 = \operatorname{tr}(Q^T H Q)^2`.
+Линейное отображение :math:`H \to Q^T H Q` сохраняет объём, поэтому
+:math:`Q^T H Q` распределена так же, как :math:`H`. Соотношение дисперсий
+2 : 1 здесь обязательно: у ``normal-mirror`` все дисперсии равны 1, и
+инвариантности нет (для :math:`2 \times 2` догадка Вигнера перестаёт быть
+точной, см. :func:`level_spacing.distributions.normal_mirror_2x2_pdf`).
+Проверка — :func:`level_spacing.experiments.orthogonal_invariance`.
+
+Случайные ортогональные матрицы для этой проверки даёт
+:func:`random_orthogonal`.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Tuple, Union
+from typing import Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
 
@@ -51,6 +65,8 @@ __all__ = [
     "available_ensembles",
     "get_ensemble",
     "make_rng",
+    "random_orthogonal",
+    "rotation_2x2",
     "sample_matrices",
 ]
 
@@ -184,3 +200,38 @@ def sample_matrices(
     (5, 2, 2)
     """
     return get_ensemble(ensemble).sample(n, size, rng)
+
+
+def random_orthogonal(n: int, size: Optional[int] = None, rng: RandomState = None) -> np.ndarray:
+    r"""Случайная ортогональная матрица, равномерно распределённая на :math:`O(n)` (мера Хаара).
+
+    QR-разложение (то есть процесс Грама–Шмидта) гауссовой матрицы
+    :math:`Z = QR` даёт ортогональную :math:`Q`. Чтобы распределение было
+    именно равномерным, знаки столбцов :math:`Q` согласуются с диагональю
+    :math:`R` (F. Mezzadri, Notices AMS, 2007): иначе результат зависит от
+    соглашения о знаках в LAPACK.
+
+    >>> q = random_orthogonal(4, rng=0)
+    >>> bool(np.allclose(q.T @ q, np.eye(4)))
+    True
+    >>> random_orthogonal(3, size=5, rng=0).shape
+    (5, 3, 3)
+    """
+    n = check_int("n", n, 1)
+    shape = (n, n) if size is None else (check_int("size", size, 0), n, n)
+    z = make_rng(rng).standard_normal(shape)
+    q, r = np.linalg.qr(z)
+    signs = np.sign(np.diagonal(r, axis1=-2, axis2=-1))
+    signs[signs == 0] = 1.0
+    return q * signs[..., None, :]
+
+
+def rotation_2x2(angle: float) -> np.ndarray:
+    """Матрица поворота плоскости на угол ``angle`` (радианы).
+
+    >>> rotation_2x2(np.pi / 2).round(12)
+    array([[ 0., -1.],
+           [ 1.,  0.]])
+    """
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([[c, -s], [s, c]])

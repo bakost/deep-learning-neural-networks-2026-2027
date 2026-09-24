@@ -30,10 +30,12 @@ from .distributions import (
     wigner_cdf,
     wigner_pdf,
 )
-from .experiments import SpacingStudy, pair_scan, pooled_spacings
+from .ensembles import get_ensemble, rotation_2x2
+from .experiments import SpacingStudy, pair_scan, pooled_spacings, rotate, study_rng
 from .stats import histogram, uniform_bins
 
 __all__ = [
+    "plot_orthogonal_invariance",
     "plot_2x2_geometry",
     "plot_discrete_ensemble",
     "plot_histogram_grid",
@@ -457,4 +459,90 @@ def plot_normal_mirror(studies: Sequence[SpacingStudy], goe_2x2: SpacingStudy) -
         ax.set_ylim(0, 1.0)
         ax.legend(fontsize=7.5, loc="center right")
     fig.suptitle(studies[0].ensemble.title)
+    return fig
+
+
+ENSEMBLE_COLORS = {"goe": "#1f77b4", "pm1-sum": "#ff7f0e", "normal-mirror": "#2ca02c", "pm1": "#9467bd"}
+ENSEMBLE_MARKERS = {"goe": "o", "pm1-sum": "s", "normal-mirror": "^", "pm1": "v"}
+SHORT_TITLES = {"goe": "GOE:\nN(0,1), A + Aᵀ", "pm1-sum": "±1,\nA + Aᵀ",
+                "normal-mirror": "N(0,1),\nсимметричная", "pm1": "±1,\nсимметричная"}
+
+
+def plot_orthogonal_invariance(
+    angle_data: Mapping[str, Mapping[str, np.ndarray]],
+    checks: Mapping[str, Mapping[str, float]],
+    angle: float = np.pi / 6,
+    size: int = 200_000,
+    seed: int = 2026,
+) -> Figure:
+    r"""Ортогональность ансамбля: распределение :math:`Q^T H Q` совпадает с распределением :math:`H`.
+
+    (а) матрицы 2×2: дисперсия :math:`H'_{11}` после поворота на угол
+    :math:`\varphi` относительно исходной, точки — моделирование, линии —
+    формула из :func:`~level_spacing.experiments.variance_vs_angle`;
+    (б), (в) распределение :math:`H_{11}` до и после поворота на угол
+    ``angle`` для GOE и для :math:`A + A^T` с :math:`A` из ±1;
+    (г) матрицы 16×16 и случайная ортогональная :math:`Q` (мера Хаара):
+    дисперсии после поворота относительно исходных и итог сравнения
+    распределений. ``checks`` — результаты
+    :func:`~level_spacing.experiments.orthogonal_invariance`.
+    """
+    fig = Figure(figsize=(11.0, 8.2), layout="constrained")
+    (ax1, ax2), (ax3, ax4) = fig.subplots(2, 2)
+
+    phi = np.linspace(0.0, np.pi / 2, 200)
+    for name, data in angle_data.items():
+        ax1.plot(np.degrees(data["angle"]), data["diag_ratio"], ENSEMBLE_MARKERS[name], ms=6,
+                 color=ENSEMBLE_COLORS[name], label=get_ensemble(name).title, alpha=0.85)
+    ax1.plot(np.degrees(phi), np.ones_like(phi), color="k", lw=1.2,
+             label="теория при $\\sigma_d^2 = 2\\sigma_o^2$: 1")
+    ax1.plot(np.degrees(phi), 1.0 + 0.5 * np.sin(2 * phi) ** 2, color="k", lw=1.2, ls="--",
+             label="теория при $\\sigma_d^2 = \\sigma_o^2$: $1 + \\frac{1}{2}\\sin^2 2\\varphi$")
+    ax1.set_xlabel("угол поворота $\\varphi$, градусы")
+    ax1.set_ylabel("$\\mathrm{Var}\\,H\'_{11} \\,/\\, \\mathrm{Var}\\,H_{11}$")
+    ax1.set_title("(а) $2\\times2$: дисперсия диагонального элемента после поворота")
+    ax1.set_xticks([0, 15, 30, 45, 60, 75, 90])
+    ax1.set_ylim(0.9, 2.0)
+    ax1.grid(alpha=0.25)
+    ax1.legend(fontsize=7.5, loc="upper center", ncol=2)
+
+    q = rotation_2x2(angle)
+    for ax, name, title in ((ax2, "goe", "(б) GOE: распределение не изменилось"),
+                            (ax3, "pm1-sum", "(в) ±1, $A + A^T$: дисперсия та же, закон другой")):
+        h = get_ensemble(name).sample(2, size, study_rng(seed, name, 2))
+        before, after = h[:, 0, 0], rotate(h, q)[:, 0, 0]
+        edges = np.linspace(-9.0, 9.0, 91) if name == "goe" else np.linspace(-4.1, 4.1, 83)
+        ax.hist(before, bins=edges, density=True, color=HIST_FACE, edgecolor=HIST_EDGE, lw=0.4,
+                label="$H_{11}$ до поворота")
+        ax.hist(after, bins=edges, density=True, histtype="step", color=WIGNER, lw=1.6,
+                label=f"$H\'_{{11}}$ после поворота на {np.degrees(angle):.0f}°")
+        if name == "goe":
+            grid = np.linspace(-9, 9, 400)
+            ax.plot(grid, np.exp(-grid**2 / 8) / np.sqrt(8 * np.pi), color="k", lw=1.0, ls="--",
+                    label="$\\mathcal{N}(0, 4)$")
+        ax.set_title(title)
+        ax.set_xlabel("значение элемента")
+        ax.set_ylabel("плотность")
+        ax.grid(alpha=0.25)
+        ax.legend(fontsize=8, loc="upper right")
+
+    names = list(checks)
+    x = np.arange(len(names))
+    diag = [checks[k]["diag_var_after"] / checks[k]["diag_var_before"] for k in names]
+    off = [checks[k]["off_var_after"] / checks[k]["off_var_before"] for k in names]
+    ax4.bar(x - 0.18, diag, width=0.36, color=HIST_EDGE, label="диагональ")
+    ax4.bar(x + 0.18, off, width=0.36, color=HIST_FACE, edgecolor=HIST_EDGE, label="вне диагонали")
+    ax4.axhline(1.0, color="k", lw=1.0)
+    for i, name in enumerate(names):
+        same = min(checks[name]["ks_diag_p"], checks[name]["ks_off_p"]) > 0.01
+        ax4.text(i, max(diag[i], off[i]) + 0.05, "закон\nсохранился" if same else "закон\nизменился",
+                 ha="center", va="bottom", fontsize=8, color=GOE_LIMIT if same else WIGNER)
+    ax4.set_xticks(x)
+    ax4.set_xticklabels([SHORT_TITLES.get(k, k) for k in names], fontsize=8)
+    ax4.set_ylabel("дисперсия после / до")
+    n = int(next(iter(checks.values()))["n"])
+    ax4.set_title(f"(г) ${n}\\times{n}$, случайная ортогональная $Q$ (мера Хаара)")
+    ax4.set_ylim(0, 2.3)
+    ax4.grid(alpha=0.25, axis="y")
+    ax4.legend(fontsize=8, loc="upper left")
     return fig

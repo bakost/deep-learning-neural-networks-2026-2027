@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional, Sequence, Union
 
 import numpy as np
+from scipy import stats as _scipy_stats
 
 from .distributions import (
     GOE2_RAW_MEAN,  # noqa: F401 (нужна доктесту модуля)
@@ -26,7 +27,7 @@ from .distributions import (
     wigner_cdf,
     wigner_sample,
 )
-from .ensembles import Ensemble, check_int, get_ensemble
+from .ensembles import Ensemble, check_int, get_ensemble, make_rng, random_orthogonal, rotation_2x2
 from .spectrum import (
     DEFAULT_CHUNK_SIZE,
     all_spacings,
@@ -52,10 +53,13 @@ __all__ = [
     "SpacingStudy",
     "ks_by_ensemble_size",
     "ks_noise_constant",
+    "orthogonal_invariance",
     "pair_scan",
     "pooled_spacings",
+    "rotate",
     "run_study",
     "study_rng",
+    "variance_vs_angle",
 ]
 
 #: Зерно по умолчанию — все числа отчёта получены с ним.
@@ -270,3 +274,103 @@ def pooled_spacings(eigvals: np.ndarray, unfold: bool = False) -> np.ndarray:
     if unfold:
         return (spacings / spacings.mean(axis=0)).ravel()
     return normalize(spacings.ravel())
+
+
+def rotate(matrices: np.ndarray, q: np.ndarray) -> np.ndarray:
+    r"""Ортогональное преобразование :math:`Q^T H Q` для каждой матрицы пачки."""
+    q = np.asarray(q, dtype=float)
+    return np.swapaxes(q, -1, -2) @ np.asarray(matrices, dtype=float) @ q
+
+
+def _element_groups(h: np.ndarray):
+    n = h.shape[-1]
+    rows, cols = np.triu_indices(n, 1)
+    return np.diagonal(h, axis1=-2, axis2=-1), h[..., rows, cols]
+
+
+def orthogonal_invariance(
+    ensemble: Union[str, Ensemble],
+    n: int,
+    size: int,
+    q: Optional[np.ndarray] = None,
+    seed: Optional[int] = DEFAULT_SEED,
+) -> Dict[str, float]:
+    r"""Проверить, что ансамбль ортогональный: :math:`Q^T H Q` распределена как :math:`H`.
+
+    Берётся *одна* фиксированная ортогональная матрица :math:`Q` (по
+    умолчанию — случайная по мере Хаара) и применяется ко всем матрицам
+    ансамбля. Сравниваются:
+
+    * дисперсии диагональных и внедиагональных элементов до и после
+      поворота (усреднённые по всем позициям);
+    * распределения элемента :math:`H_{11}` до и после поворота и элемента
+      :math:`H_{12}` до и после — двухвыборочным критерием
+      Колмогорова–Смирнова (выборки «до» и «после» берутся из *разных*
+      половин ансамбля, чтобы они были независимы);
+    * спектры: у :math:`Q^T H Q` и :math:`H` они обязаны совпасть.
+
+    Returns
+    -------
+    dict
+        ``diag_var_before/after``, ``off_var_before/after``, ``ks_diag_p``,
+        ``ks_off_p``, ``orthogonality_error`` (:math:`\|Q^TQ - I\|`),
+        ``spectrum_error`` (максимальное расхождение спектров).
+    """
+    ensemble = get_ensemble(ensemble)
+    n = check_int("n", n, 2)
+    size = check_int("size", size, 4)
+    rng = study_rng(seed, ensemble, n) if seed is not None else make_rng(None)
+    q = random_orthogonal(n, rng=rng) if q is None else np.asarray(q, dtype=float)
+    h = ensemble.sample(n, size, rng)
+    rotated = rotate(h, q)
+    half = size // 2
+    diag, off = _element_groups(h)
+    diag_r, off_r = _element_groups(rotated)
+    spectrum_error = np.max(np.abs(np.linalg.eigvalsh(h[:1000]) - np.linalg.eigvalsh(rotated[:1000])))
+    return {
+        "n": n,
+        "size": size,
+        "diag_var_before": float(diag.var(axis=0).mean()),
+        "diag_var_after": float(diag_r.var(axis=0).mean()),
+        "off_var_before": float(off.var(axis=0).mean()),
+        "off_var_after": float(off_r.var(axis=0).mean()),
+        "ks_diag_p": float(_scipy_stats.ks_2samp(diag[:half, 0], diag_r[half:, 0]).pvalue),
+        "ks_off_p": float(_scipy_stats.ks_2samp(off[:half, 0], off_r[half:, 0]).pvalue),
+        "orthogonality_error": float(np.max(np.abs(q.T @ q - np.eye(n)))),
+        "spectrum_error": float(spectrum_error),
+    }
+
+
+def variance_vs_angle(
+    ensemble: Union[str, Ensemble], angles: Sequence[float], size: int, seed: Optional[int] = DEFAULT_SEED
+) -> Dict[str, np.ndarray]:
+    r"""Матрицы 2×2: как меняются дисперсии элементов при повороте на угол :math:`\varphi`.
+
+    Для :math:`H = \begin{bmatrix} a & b \\ b & c \end{bmatrix}` и поворота
+    на угол :math:`\varphi`
+
+    .. math::
+        H'_{11} = a\cos^2\varphi + b \sin 2\varphi + c \sin^2\varphi, \qquad
+        \operatorname{Var} H'_{11} = \sigma_d^2 \Bigl(1 - \tfrac12 \sin^2 2\varphi\Bigr)
+                                   + \sigma_o^2 \sin^2 2\varphi,
+
+    где :math:`\sigma_d^2` и :math:`\sigma_o^2` — дисперсии диагонального и
+    внедиагонального элементов. От угла это не зависит только при
+    :math:`\sigma_d^2 = 2\sigma_o^2`, то есть ровно для :math:`A + A^T`.
+
+    Returns
+    -------
+    dict
+        ``angle``, ``diag_ratio`` и ``off_ratio`` — отношения дисперсий
+        :math:`H'_{11}` и :math:`H'_{12}` к исходным.
+    """
+    ensemble = get_ensemble(ensemble)
+    h = ensemble.sample(2, check_int("size", size, 2), study_rng(seed, ensemble, 2))
+    diag0, off0 = h[:, 0, 0].var(), h[:, 0, 1].var()
+    diag, off = [], []
+    for angle in angles:
+        rotated = rotate(h, rotation_2x2(angle))
+        diag.append(rotated[:, 0, 0].var() / diag0)
+        off.append(rotated[:, 0, 1].var() / off0)
+    return {"angle": np.asarray(angles, dtype=float), "diag_ratio": np.array(diag),
+            "off_ratio": np.array(off)}

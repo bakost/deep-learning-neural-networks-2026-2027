@@ -22,6 +22,7 @@ dependencies = ["numpy>=1.22", "scipy>=1.9", "matplotlib>=3.6"]
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
 jacobi = ["jacobi-eigen"]   # бэкенд "jacobi": pip install -e ../lab1
+pdf = ["pypandoc_binary", "pypdf"]   # сборка REPORT.pdf (tools/build_pdf.py, нужен Chrome)
 dev = ["pytest>=7.0", "ruff>=0.1"]
 
 [project.scripts]
