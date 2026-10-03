@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -118,12 +119,30 @@ def find_chrome() -> str:
     sys.exit("Ошибка: не найден Google Chrome/Chromium; задайте путь в переменной CHROME")
 
 
+def to_pandoc_markdown(text: str) -> str:
+    r"""Перевести формулы из записи, удобной GitHub, в запись pandoc.
+
+    GitHub перед отрисовкой формул снимает Markdown-экранирование, поэтому
+    ``\\``, ``\,``, ``\{`` внутри ``$...$`` теряют обратную косую черту.
+    В REPORT.md блочные формулы записаны блоками ```` ```math ````, а тонкий
+    пробел в строчных формулах — ``\thinspace``. pandoc ждёт ``$$...$$`` и не
+    знает ``\thinspace``, поэтому здесь всё переводится обратно.
+
+    >>> to_pandoc_markdown("```math\nx \\\\ y\n```\nи $a\\thinspace b$")
+    '$$\nx \\\\ y\n$$\nи $a\\, b$'
+    """
+    text = re.sub(r"(?ms)^```math\n(.*?)\n```$", lambda m: "$$\n" + m.group(1) + "\n$$", text)
+    return re.sub(r"\\thinspace\s*", lambda m: "\\, ", text)
+
+
 def build_html(source: Path, html: Path, workdir: Path) -> None:
     css = workdir / "report.css"
     css.write_text(CSS, encoding="utf-8")
+    prepared = workdir / "report.md"
+    prepared.write_text(to_pandoc_markdown(source.read_text(encoding="utf-8")), encoding="utf-8")
     subprocess.run(
         [
-            find_pandoc(), str(source),
+            find_pandoc(), str(prepared),
             "--from", "markdown-implicit_figures-fancy_lists",
             "--to", "html5",
             "--standalone", "--embed-resources",
