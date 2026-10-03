@@ -137,8 +137,8 @@ $\mathcal N(0, 4)$, вне диагонали $\mathcal N(0, 2)$ (раздел 1
 методички). Их совместная плотность
 
 ```math
-P(H) \propto \prod_i e^{-H_{ii}^2/8} \prod_{i<j} e^{-H_{ij}^2/4}
-= \exp\Bigl(-\frac18 \Bigl(\sum_i H_{ii}^2 + 2\sum_{i<j} H_{ij}^2\Bigr)\Bigr)
+P(H) \propto \prod_i e^{-H_{ii}^2/8} \prod_{i < j} e^{-H_{ij}^2/4}
+= \exp\Bigl(-\frac18 \Bigl(\sum_i H_{ii}^2 + 2\sum_{i < j} H_{ij}^2\Bigr)\Bigr)
 = \exp\Bigl(-\frac{\mathrm{tr}\, H^2}{8}\Bigr).
 ```
 
@@ -302,7 +302,7 @@ $[0, 0.2]$. На этом отрезке законы степенные лиш�
    вырождение в семействе вещественных симметричных матриц имеет
    коразмерность 2.
 2. **Для любого $n$.** Совместная плотность собственных чисел GOE равна
-   $P(\lambda_1, \dots, \lambda_n) \propto \prod_{i<j} \lvert \lambda_i - \lambda_j \rvert\thinspace e^{-\sum_i \lambda_i^2 / 8}$.
+   $P(\lambda_1, \dots, \lambda_n) \propto \prod_{i < j} \lvert \lambda_i - \lambda_j \rvert\thinspace e^{-\sum_i \lambda_i^2 / 8}$.
    Множитель $\lvert \lambda_i - \lambda_j \rvert$ — якобиан перехода от
    элементов матрицы к собственным числам. Он зануляет плотность при сближении
    любых двух уровней, поэтому линейное поведение около нуля одинаково для
