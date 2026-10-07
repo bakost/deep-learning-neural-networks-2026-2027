@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lipo-ols"
+version = "1.0.0"
+description = "Зависимость коэффициента липофильности от структуры молекул: линейная регрессия, МНК, t-интервалы, диагностика"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "bakost" }]
+keywords = ["linear regression", "OLS", "lipophilicity", "logP", "QSPR"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Intended Audience :: Education",
+]
+dependencies = ["numpy>=1.22", "scipy>=1.9", "matplotlib>=3.6"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+pdf = ["pypandoc_binary", "pypdf"]   # сборка REPORT.pdf (tools/build_pdf.py, нужен Chrome)
+dev = ["pytest>=7.0", "ruff>=0.1"]
+
+[project.scripts]
+lipo-ols = "lipo_ols.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+doctest_optionflags = ["ELLIPSIS", "NORMALIZE_WHITESPACE"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "RUF"]
+# Аннотации в стиле Optional/Dict — как в ЛР1 и ЛР2 (совместимость с Python 3.9);
+# RUF001–003 срабатывают на кириллицу и знаки «×», «−» в документации.
+ignore = ["UP006", "UP007", "UP035", "UP037", "UP045", "RUF001", "RUF002", "RUF003", "RUF022"]
