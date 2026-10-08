@@ -2,7 +2,8 @@ r"""Сценарии экспериментов отчёта.
 
 Каждый запуск обучения описывается :class:`Job` (архитектура, зерно,
 закон изменения скорости обучения, разбиение на обучение/контроль) и
-выполняется функцией :func:`run_job`. Запуски независимы и детерминированы
+выполняется функцией :func:`run_job`; обучение эволюционным алгоритмом —
+:class:`EAJob` и :func:`run_ea_job`. Запуски независимы и детерминированы
 (всё случайное определяется зерном), поэтому их можно выполнять в
 нескольких процессах (:func:`run_jobs`) — результат от этого не меняется.
 
@@ -14,9 +15,10 @@ r"""Сценарии экспериментов отчёта.
 from __future__ import annotations
 
 import os
+import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -31,6 +33,8 @@ __all__ = [
     "MAX_ITER",
     "REDUCED_OLS_COLUMNS",
     "SIZES",
+    "EAJob",
+    "EASummary",
     "Job",
     "RunSummary",
     "cv_splits",
@@ -38,6 +42,7 @@ __all__ = [
     "kink_activity",
     "linear_stability_bound",
     "ols_cv",
+    "run_ea_job",
     "run_job",
     "run_jobs",
 ]
@@ -99,6 +104,7 @@ class RunSummary:
     dead_units: int = 0
     params: Optional[Params] = None
     val_pred: Optional[np.ndarray] = None
+    seconds: float = 0.0
 
     @property
     def converged(self) -> bool:
@@ -149,9 +155,11 @@ def run_job(job: Job) -> RunSummary:
         val = np.asarray(job.val)
         X_val, y_val = scaler.transform(data.X[val], data.y[val])
     params0 = init_params(data.k, job.hidden, job.seed, job.init)
+    t0 = time.perf_counter()
     res = gradient_descent(params0, X, y, lr=job.schedule, delta=job.delta, max_iter=job.max_iter,
                            record_every=job.record_every, X_val=X_val, y_val=y_val,
                            batch_size=job.batch_size, seed=job.seed)
+    seconds = time.perf_counter() - t0
     flips = near = dead = 0
     if job.batch_size is None and res.status != "diverged":
         flips, near, dead = kink_activity(res.params, X, y, job.schedule(res.iterations))
@@ -160,10 +168,66 @@ def run_job(job: Job) -> RunSummary:
     if X_val is not None and res.status != "diverged":
         val_pred = scaler.inverse_y(forward(res.params, X_val)[0])
     return RunSummary(job, res.status, res.iterations, res.loss, res.grad_norm, rmse, res.history,
-                      scaler.y_std, flips, near, dead, res.params if job.keep_params else None, val_pred)
+                      scaler.y_std, flips, near, dead, res.params if job.keep_params else None, val_pred, seconds)
 
 
-def run_jobs(jobs: Sequence[Job], workers: Optional[int] = None) -> List[RunSummary]:
+@dataclass(frozen=True)
+class EAJob:
+    """Обучение эволюционным алгоритмом: ``method`` — ``"own"`` (своя стратегия) или ``"cma"`` (пакет)."""
+
+    tag: str
+    method: str
+    hidden: int
+    seed: int
+    max_evals: int = 200_000
+    train: Optional[Tuple[int, ...]] = None
+    val: Optional[Tuple[int, ...]] = None
+
+
+@dataclass
+class EASummary:
+    """Итог эволюционного обучения: ошибка в единицах :math:`\\log P`, число вычислений :math:`J`, время."""
+
+    job: EAJob
+    loss: float
+    rmse: float
+    evaluations: int
+    generations: int
+    seconds: float
+    history: Dict[str, np.ndarray]
+    y_std: float
+    val_pred: Optional[np.ndarray] = None
+
+    def rmse_curve(self) -> np.ndarray:
+        return np.sqrt(2.0 * self.history["best_loss"]) * self.y_std
+
+
+def run_ea_job(job: EAJob) -> EASummary:
+    """Обучить перцептрон своей эволюционной стратегией или CMA-ES (стандартизация — как у :func:`run_job`)."""
+    from .evolution import cma_es, evolution_strategy
+
+    data = _data()
+    train = np.arange(data.n) if job.train is None else np.asarray(job.train)
+    scaler = Standardizer.fit(data.X[train], data.y[train])
+    X, y = scaler.transform(data.X[train], data.y[train])
+    if job.method == "own":
+        res = evolution_strategy(X, y, job.hidden, max_evals=job.max_evals, seed=job.seed)
+    elif job.method == "cma":
+        res = cma_es(X, y, job.hidden, max_evals=job.max_evals, seed=job.seed)
+    else:
+        raise ValueError(f"неизвестный эволюционный метод {job.method!r} (own, cma)")
+    val_pred = None
+    if job.val is not None:
+        val_pred = scaler.inverse_y(forward(res.params, scaler.transform_x(data.X[np.asarray(job.val)]))[0])
+    return EASummary(job, res.loss, float(np.sqrt(2.0 * res.loss) * scaler.y_std), res.evaluations,
+                     res.generations, res.seconds, res.history, scaler.y_std, val_pred)
+
+
+def _run_any(job: Union[Job, EAJob]):
+    return run_ea_job(job) if isinstance(job, EAJob) else run_job(job)
+
+
+def run_jobs(jobs: Sequence[Union[Job, EAJob]], workers: Optional[int] = None) -> list:
     """Выполнить запуски параллельно (порядок результатов совпадает с порядком ``jobs``).
 
     ``workers=1`` — последовательно в текущем процессе. В рабочих процессах
@@ -172,11 +236,11 @@ def run_jobs(jobs: Sequence[Job], workers: Optional[int] = None) -> List[RunSumm
     """
     workers = workers or min(8, os.cpu_count() or 1)
     if workers <= 1 or len(jobs) <= 1:
-        return [run_job(job) for job in jobs]
+        return [_run_any(job) for job in jobs]
     for var in ("VECLIB_MAXIMUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
         os.environ.setdefault(var, "1")
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(run_job, jobs, chunksize=1))
+        return list(pool.map(_run_any, jobs, chunksize=1))
 
 
 # ------------------------------------------------------------------ опорные величины

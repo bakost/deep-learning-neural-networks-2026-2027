@@ -22,6 +22,7 @@ r"""Сравнение с ``sklearn.neural_network.MLPRegressor`` (пункт 5,
 
 from __future__ import annotations
 
+import time
 import warnings
 from typing import Dict, Optional, Sequence, Tuple
 
@@ -88,13 +89,15 @@ def sklearn_fit(X_raw: np.ndarray, y_raw: np.ndarray, hidden: int, config: dict,
     scaler = Standardizer.fit(X_raw, y_raw)
     X, y = scaler.transform(X_raw, y_raw)
     model = _regressor(hidden, len(y), random_state=seed, **config)
+    t0 = time.perf_counter()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", ConvergenceWarning)
         model.fit(X, y)
+    seconds = time.perf_counter() - t0
     not_converged = any(issubclass(w.category, ConvergenceWarning) for w in caught)
     resid = y_raw - scaler.inverse_y(model.predict(X))
     info = {"n_iter": int(model.n_iter_), "rmse": float(np.sqrt(np.mean(resid**2))),
-            "converged": not not_converged}
+            "converged": not not_converged, "seconds": seconds}
     pred = None if X_test is None else scaler.inverse_y(model.predict(scaler.transform_x(X_test)))
     return info, pred
 

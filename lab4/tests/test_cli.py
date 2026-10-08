@@ -38,8 +38,15 @@ def test_errors(capsys):
 
 
 def test_report_tiny(tmp_path):
-    cfg = ReportConfig(seeds=1, max_iter=300, cv_folds=5, cv_repeats=1, cv_max_iter=500, workers=2)
+    cfg = ReportConfig(seeds=1, max_iter=300, cv_folds=5, cv_repeats=1, cv_max_iter=500, ea_evals=300,
+                       bench_units=100, workers=2)
     generate_report(tmp_path, cfg, verbose=False)
     tables = (tmp_path / "results" / "tables.md").read_text(encoding="utf-8")
-    assert "Таблица 1" in tables and "Таблица 6" in tables
-    assert len(list((tmp_path / "figures").glob("*.png"))) == 6
+    assert "Таблица 1" in tables and "Таблица 6" in tables and "Таблица 8" in tables
+    assert len(list((tmp_path / "figures").glob("*.png"))) == 7
+
+
+def test_evolve(capsys):
+    assert main(["evolve", "-H", "2", "--evals", "600"]) == EXIT_OK
+    assert "вычислений J" in capsys.readouterr().out
+    assert main(["evolve", "-H", "2", "--evals", "0"]) == EXIT_ERROR

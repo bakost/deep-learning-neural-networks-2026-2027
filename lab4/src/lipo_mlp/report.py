@@ -2,7 +2,7 @@ r"""Пересчёт всех чисел и рисунков отчёта одн
 
 .. code-block:: bash
 
-    python -m lipo_mlp report            # ≈ 6 мин на 8 ядрах
+    python -m lipo_mlp report            # ≈ 10 мин на 8 ядрах
     python -m lipo_mlp report --quick    # уменьшенный вариант для проверки (≈ 20 с)
 
 Создаёт ``figures/*.png``, ``results/summary.json`` и ``results/tables.md``.
@@ -20,6 +20,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 import numpy as np
 
+from .benchmark import timing_benchmark
 from .data import Standardizer, load_lipo
 from .experiments import (
     DELTA,
@@ -27,6 +28,8 @@ from .experiments import (
     MAX_ITER,
     REDUCED_OLS_COLUMNS,
     SIZES,
+    EAJob,
+    EASummary,
     Job,
     RunSummary,
     cv_splits,
@@ -46,6 +49,8 @@ __all__ = ["ReportConfig", "compute", "generate_report", "write_outputs"]
 LR_GRID = (0.01, 0.03, 0.1, 0.2, 0.3, 0.4, 0.5)
 ALPHAS = (0.0, 0.01, 0.1, 1.0, 3.0, 10.0, 30.0)
 LR_HIDDEN = 16
+EA_SIZES = (2, 4, 8)
+EA_METHODS = {"own": "эволюционная стратегия (μ/μ, λ)", "cma": "CMA-ES"}
 
 
 def smooth_schedules() -> List[Schedule]:
@@ -76,11 +81,13 @@ class ReportConfig:
     cv_repeats: int = 2
     cv_max_iter: int = 100_000
     sgd_batch: int = 16
+    ea_evals: int = 200_000
+    bench_units: int = 20_000
     workers: Optional[int] = None
 
     @classmethod
     def quick(cls) -> "ReportConfig":
-        return cls(seeds=2, max_iter=20_000, cv_repeats=1, cv_max_iter=5_000)
+        return cls(seeds=2, max_iter=20_000, cv_repeats=1, cv_max_iter=5_000, ea_evals=5_000, bench_units=500)
 
 
 def _jobs(cfg: ReportConfig, n: int) -> Dict[str, List[Job]]:
@@ -101,7 +108,10 @@ def _jobs(cfg: ReportConfig, n: int) -> Dict[str, List[Job]]:
     splits = cv_splits(n, cfg.cv_folds, cfg.cv_repeats)
     out["cv"] = [Job("cv", h, k, max_iter=cfg.cv_max_iter, record_every=10, train=tr, val=va, keep_params=False)
                  for h in SIZES for k, (tr, va) in enumerate(splits)]
-    return out
+    # эволюционные алгоритмы: долгие запуски CMA-ES ставятся в очередь первыми
+    ea = [EAJob("ea", m, h, s, cfg.ea_evals) for m in ("cma", "own") for h in EA_SIZES[::-1] for s in seeds]
+    ea_cv = [EAJob("ea_cv", m, 8, k, cfg.ea_evals, tr, va) for m in ("cma", "own") for k, (tr, va) in enumerate(splits)]
+    return {"ea": ea, "ea_cv": ea_cv, **out}
 
 
 def compute(cfg: Optional[ReportConfig] = None, log: Callable[[str], None] = print) -> Dict[str, object]:
@@ -162,6 +172,8 @@ def compute(cfg: Optional[ReportConfig] = None, log: Callable[[str], None] = pri
             reg[h][alpha] = {"train_rmse": info["rmse"], "cv_rmse": _cv_rmse(pred, data.y).tolist()}
     out["regularization"] = reg
     log("scikit-learn")
+    out["benchmark"] = timing_benchmark(8, cfg.bench_units, repeats=3)
+    log("замер скорости")
 
     # важность регрессоров: ансамбли сошедшихся сетей на всей выборке
     imp = {"ols_beta": ols_standardized(Z, t)}
@@ -407,6 +419,76 @@ def write_outputs(R: Dict[str, object], root: Path, log: Callable[[str], None] =
     summary["importance"] = {"columns": cols, "ols_beta": beta.tolist(), "ols_perm": imp["ols_perm"].tolist(),  # type: ignore[index]
                              **{str(h): {k: v.tolist() for k, v in imp[h].items()} for h in (8, 32)},  # type: ignore[index]
                              "spearman": rank}
+    # ---- таблица 7: эволюционные алгоритмы против градиентного спуска
+    ea: List[EASummary] = runs["ea"]  # type: ignore[assignment]
+    lbfgs = R["sklearn_fit"]["lbfgs"]  # type: ignore[index]
+    rows = []
+    ea_summary: Dict[str, dict] = {}
+    for h in EA_SIZES:
+        gd = [r for r in runs["sweep"] if r.job.hidden == h]
+        rm = np.array([r.rmse for r in gd])
+        rows.append([str(h), "градиентный спуск", "свой", f"{int(np.median([r.iterations for r in gd])):,} итераций"
+                     .replace(",", " "), f"{rm.mean():.3f} ({rm.min():.3f}–{rm.max():.3f})"])
+        for m, title in EA_METHODS.items():
+            rs = [r for r in ea if r.job.method == m and r.job.hidden == h]
+            rm = np.array([r.rmse for r in rs])
+            rows.append([str(h), title, "свой" if m == "own" else "пакет cma",
+                         f"{rs[0].evaluations:,} вычислений J".replace(",", " "),
+                         f"{rm.mean():.3f} ({rm.min():.3f}–{rm.max():.3f})"])
+            ea_summary[f"{m}{h}"] = {"rmse": rm.tolist(), "evaluations": [r.evaluations for r in rs],
+                                     "generations": [r.generations for r in rs], "seconds": [r.seconds for r in rs],
+                                     "final_sigma": [float(r.history["sigma"][-1]) for r in rs]}
+        rows.append([str(h), "L-BFGS", "пакет sklearn", f"{lbfgs[h]['n_iter']} итераций", f"{lbfgs[h]['rmse']:.3f}"])
+    budget = f"{cfg.ea_evals:,}".replace(",", " ")
+    tables.append(f"## Таблица 7. Эволюционные алгоритмы и градиентный спуск ({cfg.seeds} запусков на метод, "
+                  f"бюджет {budget} вычислений J)\n\n" + _md(
+                      ["H", "метод", "реализация", "работа", "RMSE обучения: среднее (мин–макс)"], rows, "lllrr"))
+
+    # ---- таблица 8: свой способ или пакет (H = 8)
+    bench = R["benchmark"]
+    floor_ok = [r for r in runs["sweep"] if r.job.hidden == 8 and r.converged]
+    gd_steps = int(np.median([r.iterations for r in floor_ok])) if floor_ok else cfg.max_iter
+    cv8 = summary["cv"]  # type: ignore[assignment]
+    ea_cv: List[EASummary] = runs["ea_cv"]  # type: ignore[assignment]
+
+    def ea_cv_rmse(m: str) -> float:
+        rs = [r for r in ea_cv if r.job.method == m]
+        pred = np.full((len(rs) // cfg.cv_folds, n), np.nan)
+        for k, r in enumerate(rs):
+            pred[k // cfg.cv_folds, list(r.job.val)] = r.val_pred
+        return float(np.mean(_cv_rmse(pred, y)))
+
+    sk = R["sklearn_fit"]
+    sgd_name, adam_name = list(SKLEARN_CONFIGS)[:2]
+    us = {k: v["us_per_unit"] for k, v in bench.items()}  # type: ignore[union-attr]
+    own_rm = np.mean([r.rmse for r in ea if r.job.method == "own" and r.job.hidden == 8])
+    cma_rm = np.mean([r.rmse for r in ea if r.job.method == "cma" and r.job.hidden == 8])
+    gd_rm = float(np.mean([r.rmse for r in runs["sweep"] if r.job.hidden == 8]))
+    compare = [
+        ("градиентный спуск, остановка по ‖DJ‖ < δ", "свой", "градиент", gd_steps, us["gd_own"],
+         gd_steps * us["gd_own"] / 1e6, gd_rm, float(np.mean(cv8["mlp8"]["cv_rmse"]))),
+        ("тот же спуск в sklearn (SGD, полный пакет)", "пакет", "градиент", gd_steps, us["gd_sklearn"],
+         gd_steps * us["gd_sklearn"] / 1e6, gd_rm, float(np.mean(cv8["mlp8"]["cv_rmse"]))),
+        ("SGD sklearn, остановка sklearn", "пакет", "градиент", sk[sgd_name][8]["n_iter"], us["gd_sklearn"],
+         sk[sgd_name][8]["seconds"], sk[sgd_name][8]["rmse"], float(np.mean(cv8[f"sklearn {sgd_name} 8"]["cv_rmse"]))),
+        ("Adam sklearn", "пакет", "градиент", sk[adam_name][8]["n_iter"], None, sk[adam_name][8]["seconds"],
+         sk[adam_name][8]["rmse"], float(np.mean(cv8[f"sklearn {adam_name} 8"]["cv_rmse"]))),
+        ("L-BFGS sklearn", "пакет", "градиент + кривизна", sk["lbfgs"][8]["n_iter"], None, sk["lbfgs"][8]["seconds"],
+         sk["lbfgs"][8]["rmse"], float(np.mean(cv8["sklearn lbfgs 8"]["cv_rmse"]))),
+        ("эволюционная стратегия (μ/μ, λ)", "свой", "только J", cfg.ea_evals, us["es_own"],
+         cfg.ea_evals * us["es_own"] / 1e6, own_rm, ea_cv_rmse("own")),
+        ("CMA-ES (пакет cma)", "пакет", "только J", cfg.ea_evals, us["cma"], cfg.ea_evals * us["cma"] / 1e6,
+         cma_rm, ea_cv_rmse("cma")),
+    ]
+    rows = [[name, impl, what, f"{steps:,}".replace(",", " "), "—" if u is None else f"{u:.0f}", f"{sec:.2f}",
+             f"{tr:.3f}", f"{cvr:.3f}"] for name, impl, what, steps, u, sec, tr, cvr in compare]
+    tables.append("## Таблица 8. Свой способ и пакеты, H = 8\n\n" + _md(
+        ["метод", "реализация", "что использует", "шагов", "мкс на шаг", "время, с", "RMSE обучения",
+         "RMSE контроля"], rows, "lllrrrrr"))
+    summary["evolution"] = ea_summary
+    summary["benchmark"] = bench
+    summary["own_vs_package"] = [dict(zip(["method", "implementation", "uses", "steps", "us_per_step", "seconds",
+                                           "train_rmse", "cv_rmse"], row)) for row in compare]
     log("таблицы")
 
     # ---- рисунки
@@ -419,6 +501,8 @@ def write_outputs(R: Dict[str, object], root: Path, log: Callable[[str], None] =
     plots.save(plots.plot_decay(runs, groups, DELTA), figs / "decay.png")
     plots.save(plots.plot_generalization(curves, summary["cv"], floor), figs / "generalization.png")  # type: ignore[arg-type]
     plots.save(plots.plot_importance(cols, beta, imp), figs / "importance.png")
+    plots.save(plots.plot_evolution(ea, runs["sweep"], floor, {h: lbfgs[h]["rmse"] for h in EA_SIZES}),
+               figs / "evolution.png")
     log("рисунки")
 
     with open(root / "results" / "summary.json", "w", encoding="utf-8") as handle:

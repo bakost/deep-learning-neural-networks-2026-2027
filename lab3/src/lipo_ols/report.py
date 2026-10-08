@@ -2,7 +2,7 @@ r"""Пересчёт всех чисел и рисунков отчёта одн
 
 .. code-block:: bash
 
-    python -m lipo_ols report          # ≈ 15 с
+    python -m lipo_ols report          # ≈ 10 с
 
 Создаёт ``figures/*.png``, ``results/summary.json`` (все числа),
 ``results/residuals.csv`` (остатки по веществам, пункт 3) и
@@ -273,6 +273,23 @@ def generate_report(root: Path, data: Optional[LipoData] = None, repeats: int = 
                              "delta_model": p.delta_model, "delta_reduced": q.delta_model,
                              "exact_fit": p.exact_fit, "terms": p.terms} for p, q in zip(pairs, pairs_red)]
     log("пары молекул")
+
+    # --------------------------------------- свой расчёт против statsmodels
+    try:
+        from .package_compare import compare_with_statsmodels
+
+        cmp = compare_with_statsmodels(data, LEVEL)
+    except ImportError:
+        cmp = None
+    if cmp is not None:
+        rows = [[r["item"], f"{r['diff']:.1e}" + (f" ({r['note']})" if r.get("note") else "")] for r in cmp["rows"]]
+        tm = cmp["timing"]
+        rows.append(["время: оценка + SE, p, интервалы, F", f"{tm['ours_ms']:.2f} мс (свой) / "
+                     f"{tm['statsmodels_ms']:.2f} мс (statsmodels)"])
+        tables.append(f"## Таблица 9. Свой расчёт и statsmodels {cmp['version']}: наибольшее расхождение\n\n"
+                      + _md(["величина", "max \\|свой − statsmodels\\|"], rows, "lr"))
+        out["statsmodels"] = cmp
+    log("сравнение с statsmodels")
 
     # ---------------------------------------------------------------- рисунки
     press = press_statistics(fit.X, fit.y)

@@ -21,6 +21,7 @@ from .network import forward, gradients
 
 __all__ = [
     "plot_decay",
+    "plot_evolution",
     "plot_generalization",
     "plot_importance",
     "plot_iterations",
@@ -306,4 +307,66 @@ def plot_importance(columns: Sequence[str], beta: np.ndarray, imp: dict) -> Figu
         b.set_title("(б) Рост ошибки при перемешивании регрессора", loc="left")
         b.grid(axis="y", visible=False)
         b.legend(loc="lower right")
+    return fig
+
+
+# ------------------------------------------------------------------ рисунок 7
+def plot_evolution(ea: Sequence, sweep: Sequence[RunSummary], floor: float, lbfgs: Dict[int, float]) -> Figure:
+    """Эволюционные алгоритмы против градиентного спуска.
+
+    (а) H = 8: лучшая ошибка на обучении против числа вычислений J (для
+    градиентного спуска — против числа итераций); (б) итоговая ошибка для
+    H = 2, 4, 8; (в) шаг мутации σ по ходу эволюции (зерно 0).
+    """
+    with _style():
+        fig = Figure(figsize=(9.4, 3.6), layout="constrained")
+        a, b, c = fig.subplots(1, 3, width_ratios=[1.25, 1, 1])
+        colors = {"gd": BLUE, "own": ORANGE, "cma": AQUA}
+        labels = {"gd": "градиентный спуск (свой)", "own": "ЭС (μ/μ, λ) (своя)", "cma": "CMA-ES (пакет cma)"}
+        for m in ("own", "cma"):
+            rs = sorted((r for r in ea if r.job.method == m and r.job.hidden == 8), key=lambda r: r.job.seed)
+            for k, r in enumerate(rs):
+                a.plot(r.history["evaluations"], r.rmse_curve(), color=colors[m], linewidth=1.0,
+                       alpha=1.0 if k == 0 else 0.35, label=labels[m] if k == 0 else None)
+        for k, r in enumerate(sorted((r for r in sweep if r.job.hidden == 8), key=lambda r: r.job.seed)):
+            a.plot(r.history["iteration"] + 1, r.rmse_curve(), color=colors["gd"], linewidth=1.0,
+                   alpha=1.0 if k == 0 else 0.35, label=labels["gd"] if k == 0 else None)
+        a.axhline(floor, color=MUTED, linewidth=1.0)
+        a.text(12, floor * 0.92, f"нижняя граница {floor:.3f}", fontsize=7.5, color=INK_2, va="top")
+        a.set_xscale("log")
+        a.set_yscale("log")
+        a.set_ylim(bottom=floor * 0.75)
+        a.set_xlim(left=10)
+        a.set_xlabel("вычислений J (для спуска — итераций)")
+        a.set_ylabel(r"RMSE на обучении, ед. $\log P$")
+        a.set_title("(а) H = 8: ход обучения", loc="left")
+
+        sizes = sorted({r.job.hidden for r in ea})
+        offsets = {"gd": -0.24, "own": -0.08, "cma": 0.08}
+        for k, h in enumerate(sizes):
+            groups = {"gd": [r.rmse for r in sweep if r.job.hidden == h]}
+            for m in ("own", "cma"):
+                groups[m] = [r.rmse for r in ea if r.job.method == m and r.job.hidden == h]
+            for m, vals in groups.items():
+                xs = np.full(len(vals), k + offsets[m]) + np.linspace(-0.03, 0.03, len(vals))
+                b.scatter(xs, vals, s=22, color=colors[m], edgecolors="white", linewidths=0.6, zorder=3,
+                          label=labels[m] if k == 0 else None)
+            b.scatter([k + 0.24], [lbfgs[h]], s=40, marker="D", color=INK_2, edgecolors="white", zorder=3,
+                      label="L-BFGS (sklearn)" if k == 0 else None)
+        b.axhline(floor, color=MUTED, linewidth=1.0)
+        b.set_xticks(range(len(sizes)), [f"H = {h}" for h in sizes])
+        b.grid(axis="x", visible=False)
+        b.set_ylabel(r"RMSE на обучении, ед. $\log P$")
+        b.set_title("(б) Итоговая ошибка", loc="left")
+
+        for m in ("own", "cma"):
+            r = min((r for r in ea if r.job.method == m and r.job.hidden == 8), key=lambda r: r.job.seed)
+            c.plot(r.history["evaluations"], r.history["sigma"], color=colors[m], label=labels[m])
+        c.set_xscale("log")
+        c.set_yscale("log")
+        c.set_xlabel("вычислений J")
+        c.set_ylabel("шаг мутации σ")
+        c.set_title("(в) Адаптация шага, H = 8", loc="left")
+        handles, names = b.get_legend_handles_labels()
+        fig.legend(handles, names, loc="outside lower center", ncols=len(names), markerscale=1.3)
     return fig

@@ -5,7 +5,8 @@
 методички) методом наименьших квадратов по выборке [`lipo.csv`](../lipo.csv).
 Он находит остатки, $s^2$, $s$, $R^2$, доверительные интервалы коэффициентов
 по t-статистике, проверяет условия применимости МНК и сравнивает результат
-со статьёй López, Pinheiro, Zamora (2021).
+со статьёй López, Pinheiro, Zamora (2021). Все расчёты сделаны своим кодом
+по формулам лекции 3 и сверены с пакетом `statsmodels` (раздел 4.5 отчёта).
 
 **Отчёт с результатами и ответами на вопросы пункта 7 — [REPORT.md](REPORT.md),
 он же в PDF — [REPORT.pdf](REPORT.pdf).**
@@ -23,7 +24,8 @@ fit.conf_int(0.95)            # пункт 6: b ± SE(b)·t, массив 25 × 
 
 ## Установка
 
-Нужен Python ≥ 3.9, NumPy, SciPy и Matplotlib.
+Нужен Python ≥ 3.9, NumPy, SciPy и Matplotlib; для сверки с пакетом —
+statsmodels (ставится вместе с тестовыми зависимостями).
 
 ```bash
 python3 -m venv .venv
@@ -47,7 +49,7 @@ python -m lipo_ols fit --columns C PSA HBA1 --level 0.99  # часть регр�
 python -m lipo_ols fit --method qr --json               # МНК через QR, вывод в JSON
 python -m lipo_ols residuals --sort                     # пункт 3: остатки по веществам
 python -m lipo_ols diagnostics                          # пункт 7: условия применимости МНК
-python -m lipo_ols report                               # все рисунки и таблицы отчёта (≈ 5 с)
+python -m lipo_ols report                               # все рисунки и таблицы отчёта (≈ 10 с)
 ```
 
 Пример вывода `fit` (сокращён):
@@ -85,7 +87,7 @@ python tools/build_pdf.py        # REPORT.md -> REPORT.pdf (нужен Google Ch
 ## Тесты
 
 ```bash
-python -m pytest                       # 92 теста, ≈ 6 с
+python -m pytest                       # 94 теста, ≈ 10 с
 python -m pytest --doctest-modules src # примеры из докстрингов
 ruff check src tests
 ```
@@ -99,6 +101,7 @@ ruff check src tests
 | `test_validation.py` | скользящий контроль против формулы $e_i/(1-h_{ii})$, k-кратная проверка, пошаговое исключение |
 | `test_contributions.py` | стандартизованные коэффициенты, $\Delta R^2$, пары молекул |
 | `test_literature.py` | воспроизведение статистик MLR-1, MLR-2, MLR-3 из статьи [2] |
+| `test_package_compare.py` | совпадение всех величин со `statsmodels` до $10^{-9}$, особые точки с $h = 1$ |
 | `test_cli.py`, `test_plots.py` | командная строка, генерация отчёта, рисунки |
 
 ## Структура
@@ -117,13 +120,14 @@ lab3/
 │   ├── contributions.py       вклад регрессоров, пары молекул              — пункт 7
 │   ├── validation.py          скользящий контроль, k-fold, исключение      — пункт 7
 │   ├── literature.py          числа из статьи [2]                          — пункт 7
+│   ├── package_compare.py     свой расчёт против statsmodels               — дополнение
 │   ├── plots.py               рисунки
 │   ├── report.py              пересчёт всего отчёта
 │   └── __main__.py            командная строка
 ├── tools/
 │   ├── fill_tables.py         таблицы results/tables.md → REPORT.md
 │   └── build_pdf.py           REPORT.md → REPORT.pdf
-├── tests/                     92 теста
+├── tests/                     94 теста
 ├── figures/                   рисунки отчёта (генерируются)
 └── results/                   summary.json, tables.md, residuals.csv (генерируются)
 ```
@@ -142,3 +146,4 @@ lab3/
 | 7. Вклад регрессоров | раздел 4.2: стандартизованные коэффициенты, $\Delta R^2$, пары молекул, сравнение с теорией |
 | 7. Условия применимости МНК | раздел 4.3: RESET, VIF, Бройш–Паган, Дарбин–Уотсон, Шапиро–Уилк, рычаги, Кук |
 | 7. Сравнение с [2] | раздел 4.4: MLR-1/2/3 воспроизведены до последнего знака; табл. 5 |
+| Дополнение: свой способ и пакет | раздел 4.5, табл. 9: сверка со `statsmodels`, что лучше и почему; почему эволюционный алгоритм здесь не нужен |

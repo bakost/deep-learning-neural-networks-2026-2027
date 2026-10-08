@@ -14,6 +14,9 @@
     # сравнение с scikit-learn
     python -m lipo_mlp sklearn --hidden 8
 
+    # обучение эволюционным алгоритмом: своя стратегия или CMA-ES (пакет cma)
+    python -m lipo_mlp evolve --hidden 8 --method own --evals 200000
+
     # все рисунки и таблицы отчёта
     python -m lipo_mlp report
 
@@ -87,6 +90,13 @@ def build_parser() -> argparse.ArgumentParser:
     sweep.add_argument("--seeds", type=int, default=3, help="зёрен на размер (3)")
     sweep.add_argument("-j", "--workers", type=int, default=None, help="процессов (по числу ядер, до 8)")
     _add_training_args(sweep)
+
+    evo = commands.add_parser("evolve", help="обучение эволюционным алгоритмом (без градиента)")
+    evo.add_argument("-H", "--hidden", type=int, default=8, help="нейронов скрытого слоя (8)")
+    evo.add_argument("-m", "--method", choices=("own", "cma"), default="own",
+                     help="own — своя (μ/μ, λ)-стратегия, cma — CMA-ES из пакета cma")
+    evo.add_argument("-n", "--evals", type=int, default=200_000, help="бюджет вычислений J (200000)")
+    evo.add_argument("-s", "--seed", type=int, default=0, help="зерно (0)")
 
     sk = commands.add_parser("sklearn", help="сравнение с MLPRegressor из scikit-learn")
     sk.add_argument("-H", "--hidden", type=int, default=8)
@@ -168,6 +178,25 @@ def _cmd_sweep(args) -> int:
     return EXIT_OK
 
 
+def _cmd_evolve(args) -> int:
+    from .evolution import cma_es, evolution_strategy
+
+    if args.hidden < 1 or args.evals < 1:
+        raise ValueError("число нейронов и бюджет должны быть положительными")
+    data = load_lipo()
+    scaler = Standardizer.fit(data.X, data.y)
+    Z, t = scaler.transform(data.X, data.y)
+    fn = evolution_strategy if args.method == "own" else cma_es
+    res = fn(Z, t, args.hidden, max_evals=args.evals, seed=args.seed)
+    rmse = float(np.sqrt(2 * res.loss) * scaler.y_std)
+    title = "своя (μ/μ, λ)-эволюционная стратегия" if args.method == "own" else "CMA-ES (пакет cma)"
+    print(f"Перцептрон H = {args.hidden} ({n_params(data.k, args.hidden)} параметров), {title}")
+    print(f"  вычислений J: {res.evaluations}, поколений: {res.generations}, {res.seconds:.1f} с")
+    print(f"  RMSE на обучающей выборке = {rmse:.4f} (нижняя граница {interpolation_floor(data):.4f}), "
+          f"шаг мутации в конце σ = {res.history['sigma'][-1]:.2e}")
+    return EXIT_OK
+
+
 def _cmd_sklearn(args) -> int:
     from .sklearn_compare import SKLEARN_CONFIGS, sklearn_fit, sklearn_trajectory
 
@@ -191,6 +220,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _cmd_train(args)
         if args.command == "sweep":
             return _cmd_sweep(args)
+        if args.command == "evolve":
+            return _cmd_evolve(args)
         if args.command == "sklearn":
             return _cmd_sklearn(args)
         if args.command == "report":

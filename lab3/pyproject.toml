@@ -20,7 +20,8 @@ classifiers = [
 dependencies = ["numpy>=1.22", "scipy>=1.9", "matplotlib>=3.6"]
 
 [project.optional-dependencies]
-test = ["pytest>=7.0"]
+test = ["pytest>=7.0", "statsmodels>=0.14"]
+compare = ["statsmodels>=0.14"]   # сверка со statsmodels (раздел 4.5 отчёта)
 pdf = ["pypandoc_binary", "pypdf"]   # сборка REPORT.pdf (tools/build_pdf.py, нужен Chrome)
 dev = ["pytest>=7.0", "ruff>=0.1"]
 

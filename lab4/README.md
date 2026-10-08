@@ -9,6 +9,9 @@ $$\log P = b^2_1 + (w^2)^T \mathrm{relu}(w^1 x + b^1)$$
 разностями. Пакет исследует сходимость, уменьшение скорости обучения,
 обобщающую способность и вклад регрессоров, а результаты сравнивает с
 `MLPRegressor` из scikit-learn и с линейной регрессией из [ЛР3](../lab3).
+По дополнению к заданию сеть обучается также эволюционными алгоритмами
+(своя $(\mu/\mu, \lambda)$-стратегия и CMA-ES из пакета `cma`), а свой код
+сравнивается с пакетами: что точнее, быстрее и лучше предсказывает.
 
 **Отчёт с результатами и ответами на вопросы пункта 5 — [REPORT.md](REPORT.md),
 он же в PDF — [REPORT.pdf](REPORT.pdf).**
@@ -27,11 +30,12 @@ res.status, res.iterations                            # ('converged', ...)
 
 ## Установка
 
-Нужен Python ≥ 3.9, NumPy, SciPy, Matplotlib; для сравнения — scikit-learn.
+Нужен Python ≥ 3.9, NumPy, SciPy, Matplotlib; для сравнения — scikit-learn
+и cma (CMA-ES).
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e ".[test]"        # вместе с pytest и scikit-learn
+.venv/bin/pip install -e ".[test]"        # вместе с pytest, scikit-learn и cma
 ```
 
 Файл с выборкой ищется в корне репозитория (`../lipo.csv`) или по переменной
@@ -47,7 +51,9 @@ python -m lipo_mlp train -H 4 --schedule exponential --gamma 0.99999 --plot h4.p
 python -m lipo_mlp train -H 16 --batch-size 16 --schedule inverse --tau 20000  # мини-пакеты
 python -m lipo_mlp sweep --seeds 3                      # все размеры скрытого слоя (параллельно)
 python -m lipo_mlp sklearn -H 8                         # сверка с MLPRegressor
-python -m lipo_mlp report                               # все рисунки и таблицы отчёта (≈ 6 мин на 8 ядрах)
+python -m lipo_mlp evolve -H 8 --method own             # своя эволюционная стратегия (без градиента)
+python -m lipo_mlp evolve -H 8 --method cma             # CMA-ES из пакета cma
+python -m lipo_mlp report                               # все рисунки и таблицы отчёта (≈ 10 мин на 8 ядрах)
 python -m lipo_mlp report --quick                       # уменьшенный вариант (≈ 20 с)
 ```
 
@@ -71,7 +77,7 @@ python tools/build_pdf.py        # REPORT.md -> REPORT.pdf (нужен Google Ch
 ## Тесты
 
 ```bash
-python -m pytest                       # ≈ 30 с
+python -m pytest                       # ≈ 35 с
 python -m pytest --doctest-modules src
 ruff check src tests
 ```
@@ -82,6 +88,7 @@ ruff check src tests
 | `test_training.py` | убывание потерь, остановка по δ, расходимость при большом ε, выход на нижнюю границу ошибки, мини-пакеты, законы ε |
 | `test_schedules.py` | значения и суммы законов уменьшения скорости обучения |
 | `test_sklearn.py` | траектория полнопакетного SGD в scikit-learn совпадает с нашей до 10⁻¹⁰ |
+| `test_evolution.py` | векторизованная функция потерь популяции, своя ЭС (улучшение, воспроизводимость, остановка по цели), CMA-ES, замер скорости |
 | `test_experiments.py` | граница устойчивости, разбиения перекрёстной проверки, детерминированность параллельных запусков |
 | `test_importance.py`, `test_data.py`, `test_cli.py` | меры вклада регрессоров, данные, командная строка, генерация отчёта |
 
@@ -100,6 +107,8 @@ lab4/
 │   ├── experiments.py         запуски (параллельно), перекрёстная проверка   — пункт 5
 │   ├── importance.py          вклад регрессоров                              — пункт 5
 │   ├── sklearn_compare.py     сравнение с MLPRegressor                       — пункт 5
+│   ├── evolution.py           своя (μ/μ, λ)-ЭС и CMA-ES (пакет cma)          — дополнение
+│   ├── benchmark.py           замер скорости: свой код против пакетов        — дополнение
 │   ├── plots.py, report.py    рисунки и пересчёт всего отчёта
 │   └── __main__.py            командная строка
 ├── tools/                     fill_tables.py, build_pdf.py
@@ -122,3 +131,5 @@ lab4/
 | 5. Адекватность модели | раздел 6: перекрёстная проверка, табл. 4, рис. 5 |
 | 5. Вклад регрессоров | раздел 7: табл. 6, рис. 6 |
 | 5. Сравнение с линейной регрессией | раздел 8 |
+| Дополнение: эволюционный алгоритм | раздел 9, табл. 7, рис. 7: своя (μ/μ, λ)-стратегия и CMA-ES |
+| Дополнение: свой способ и пакет, что лучше | раздел 10, табл. 8 и итоговая таблица критериев |
