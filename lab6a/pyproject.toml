@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transformer-lab"
+version = "1.0.0"
+description = "ЛР6а: параметры самовнимания, эквивариантность и производные softmax"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "bakost" }]
+dependencies = ["numpy>=1.22", "matplotlib>=3.6"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+pdf = ["pypandoc_binary", "pypdf"]
+dev = ["pytest>=7", "ruff>=0.1"]
+
+[project.scripts]
+transformer-lab = "transformer_lab.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
