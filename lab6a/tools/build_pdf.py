@@ -32,8 +32,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-TITLE = "Лабораторная работа 6. Стохастический градиентный спуск и его модификации"
-SUBJECT = "Золотое сечение и метод Брента; градиентный спуск, СГС с мини-пакетами, импульс Нестерова, Adam, L2-штраф"
+TITLE = "Лабораторная работа 6а. Самовнимание и слои трансформеров"
+SUBJECT = "Число параметров, эквивариантность к перестановкам, якобиан softmax и насыщение"
 
 CHROME_CANDIDATES = (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -55,10 +55,10 @@ CSS = r"""
     color: #555;
   }
 }
-html { font-size: 10.5pt; }
+html { font-size: 10pt; }
 body {
   font-family: "STIX Two Text", "PT Serif", "Times New Roman", serif;
-  line-height: 1.38;
+  line-height: 1.35;
   color: #111;
   margin: 0;
   hyphens: auto;

@@ -1,6 +1,6 @@
 """Подставить таблицы из results/tables.md в REPORT.md.
 
-Таблицы отчёта генерирует ``python -m sgd_lab report`` в файл
+Таблицы отчёта генерирует ``python -m transformer_lab report`` в файл
 ``results/tables.md`` (каждая — под заголовком «## Таблица N. …»). В
 ``REPORT.md`` место таблицы отмечено комментариями::
 
